@@ -112,6 +112,16 @@ class MainWindow(QMainWindow):
         # (3) Find the max-area contour
         [_, cnts, _] = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # assert landscape orientation
+        if len(cnts) > 0:
+            cnt = sorted(cnts, key=cv2.contourArea)[-1]
+            (x, y), (w, h), a = cv2.minAreaRect(cnt)
+            if h > w:
+                morphed = cv2.rotate(morphed, cv2.ROTATE_90_CLOCKWISE)
+
+        # (3) Find the max-area contour
+        [_, cnts, _] = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
         if len(cnts) > 0:
             cnt = sorted(cnts, key=cv2.contourArea)[-1]
 
@@ -161,6 +171,8 @@ class DisplayImageWidget(QtWidgets.QWidget):
         super(DisplayImageWidget, self).__init__(parent)
 
         self.image_frame = QtWidgets.QLabel()
+        self.image_frame.setFixedWidth(1600)
+        self.image_frame.setFixedHeight(900)
 
         self.layout = QtWidgets.QVBoxLayout()
         self.layout.addWidget(self.image_frame)
@@ -170,7 +182,8 @@ class DisplayImageWidget(QtWidgets.QWidget):
         qimage = QImage(image.data, image.shape[1], image.shape[0], image.strides[0],
                         image_format)
         qimage = qimage.rgbSwapped()
-        self.image_frame.setPixmap(QPixmap.fromImage(qimage))
+        w = self.image_frame.width()
+        self.image_frame.setPixmap(QPixmap.fromImage(qimage).scaledToWidth(w))
 
 
 if __name__ == '__main__':
