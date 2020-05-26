@@ -1,21 +1,25 @@
+# pyinstaller -D --clean --noconfirm --icon=ic_launcher.ico toolsize.spec
+# a.datas +=  [('ic_launcher.ico', 'ic_launcher.ico', 'DATA')]
+
 import sys
 
 import cv2
 import ezdxf
 import numpy as np
-from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QLabel, QMainWindow,\
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QImage, QIcon
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QLabel, QMainWindow, \
     QVBoxLayout, QSlider, QFileDialog
 
-hiddenimports = ['numpy.core.multiarray']
+from QtImageViewer import QtImageViewer
+
+VERSION = "0.2.0"
 
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.setWindowTitle("ADS easysim")
+        self.setWindowTitle(f"ToolSize v{VERSION}")
         central_widget = QWidget()
 
         self.src = None
@@ -50,7 +54,30 @@ class MainWindow(QMainWindow):
         wdg_slider_kernel.layout().addWidget(slider_label_kernel)
         wdg_slider_kernel.layout().addWidget(self.slider_kernel)
 
-        self.image_widget = DisplayImageWidget()
+        self.viewer = QtImageViewer()
+        self.viewer.setMinimumSize(640, 480)
+
+        # Set viewer's aspect ratio mode.
+        # !!! ONLY applies to full image view.
+        # !!! Aspect ratio always ignored when zoomed.
+        #   Qt.IgnoreAspectRatio: Fit to viewport.
+        #   Qt.KeepAspectRatio: Fit in viewport using aspect ratio.
+        #   Qt.KeepAspectRatioByExpanding: Fill viewport using aspect ratio.
+        self.viewer.aspectRatioMode = Qt.KeepAspectRatio
+
+        # Set the viewer's scroll bar behaviour.
+        #   Qt.ScrollBarAlwaysOff: Never show scroll bar.
+        #   Qt.ScrollBarAlwaysOn: Always show scroll bar.
+        #   Qt.ScrollBarAsNeeded: Show scroll bar only when zoomed.
+        self.viewer.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.viewer.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Allow zooming with right mouse button.
+        # Drag for zoom box, doubleclick to view full image.
+        self.viewer.canZoom = True
+
+        # Allow panning with left mouse button.
+        self.viewer.canPan = True
 
         btn_widget = QWidget()
         btn_widget.setLayout(QHBoxLayout())
@@ -67,7 +94,7 @@ class MainWindow(QMainWindow):
         central_widget.layout().addWidget(btn_widget)
         central_widget.layout().addWidget(wdg_slider_thresh)
         central_widget.layout().addWidget(wdg_slider_kernel)
-        central_widget.layout().addWidget(self.image_widget)
+        central_widget.layout().addWidget(self.viewer)
         self.setCentralWidget(central_widget)
 
     def on_load_pressed(self):
@@ -76,7 +103,7 @@ class MainWindow(QMainWindow):
                                                   "Image files (*.jpg *.jpeg *.png *.gif)", options=options)
         if filename:
             self.process(filename)
-            self.image_widget.update_image(self.dst, QImage.Format_RGB888)
+            self.update_image(self.dst, QImage.Format_RGB888)
 
     def on_save_pressed(self):
         options = QFileDialog.Options()
@@ -94,7 +121,7 @@ class MainWindow(QMainWindow):
 
     def on_slider_changed(self):
         self.process()
-        self.image_widget.update_image(self.dst, QImage.Format_RGB888)
+        self.update_image(self.dst, QImage.Format_RGB888)
 
     def process(self, filename=None):
         if filename is not None:
@@ -165,25 +192,11 @@ class MainWindow(QMainWindow):
 
                     self.scaling = px2mm
 
-
-class DisplayImageWidget(QtWidgets.QWidget):
-    def __init__(self, parent=None):
-        super(DisplayImageWidget, self).__init__(parent)
-
-        self.image_frame = QtWidgets.QLabel()
-        self.image_frame.setFixedWidth(1600)
-        self.image_frame.setFixedHeight(900)
-
-        self.layout = QtWidgets.QVBoxLayout()
-        self.layout.addWidget(self.image_frame)
-        self.setLayout(self.layout)
-
     def update_image(self, image, image_format):
         qimage = QImage(image.data, image.shape[1], image.shape[0], image.strides[0],
                         image_format)
         qimage = qimage.rgbSwapped()
-        w = self.image_frame.width()
-        self.image_frame.setPixmap(QPixmap.fromImage(qimage).scaledToWidth(w))
+        self.viewer.setImage(qimage)
 
 
 if __name__ == '__main__':
@@ -198,6 +211,12 @@ if __name__ == '__main__':
     sys.excepthook = exception_hook
 
     app = QApplication(sys.argv)
+
+    # set app icon
+    app_icon = QIcon()
+    app_icon.addFile('ic_launcher.ico', QSize(256, 256))
+    app.setWindowIcon(app_icon)
+
     window = MainWindow()
     window.show()
     app.exec_()
