@@ -8,12 +8,15 @@ import ezdxf
 import numpy as np
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QImage, QIcon
+from PyQt5.QtSensors import QCompass
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QLabel, QMainWindow, \
-    QVBoxLayout, QSlider, QFileDialog
+    QVBoxLayout, QSlider, QFileDialog, QComboBox
 
 from QtImageViewer import QtImageViewer
 
-VERSION = "0.2.0"
+import yaml
+
+VERSION = "0.2.1"
 
 
 class MainWindow(QMainWindow):
@@ -22,10 +25,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"ToolSize v{VERSION}")
         central_widget = QWidget()
 
+        self.window_sizes = [(200, 200), (350, 350), (555, 555)]
+
         self.src = None
         self.dst = None
         self.cnt = None
         self.scaling = 1.0
+
+        self.prefs = self.load_preferences_or_default()
 
         central_widget.setLayout(QVBoxLayout())
 
@@ -36,7 +43,7 @@ class MainWindow(QMainWindow):
 
         self.slider_thresh = QSlider(Qt.Horizontal)
         self.slider_thresh.setMaximum(255)
-        self.slider_thresh.setValue(150)
+        self.slider_thresh.setValue(self.prefs['threshold'])
         self.slider_thresh.valueChanged.connect(self.on_slider_changed)
         wdg_slider_thresh.layout().addWidget(slider_label_thresh)
         wdg_slider_thresh.layout().addWidget(self.slider_thresh)
@@ -49,7 +56,7 @@ class MainWindow(QMainWindow):
         self.slider_kernel = QSlider(Qt.Horizontal)
         self.slider_kernel.setMaximum(65)
         self.slider_kernel.setMinimum(1)
-        self.slider_kernel.setValue(11)
+        self.slider_kernel.setValue(self.prefs['kernel'])
         self.slider_kernel.valueChanged.connect(self.on_slider_changed)
         wdg_slider_kernel.layout().addWidget(slider_label_kernel)
         wdg_slider_kernel.layout().addWidget(self.slider_kernel)
@@ -88,7 +95,16 @@ class MainWindow(QMainWindow):
         self.btn_load = QPushButton('Load image')
         self.btn_load.clicked.connect(self.on_load_pressed)
 
+        self.cmb_scaling = QComboBox()
+        for s in self.window_sizes:
+            self.cmb_scaling.addItem(f"{s[0]}x{s[1]}mm")
+
+        self.cmb_scaling.setCurrentIndex(self.prefs['scaling_idx'])
+
+        self.cmb_scaling.currentIndexChanged.connect(self.on_scale_selection_changed)
+
         btn_widget.layout().addWidget(self.btn_load)
+        btn_widget.layout().addWidget(self.cmb_scaling)
         btn_widget.layout().addWidget(self.btn_save)
 
         central_widget.layout().addWidget(btn_widget)
@@ -96,6 +112,10 @@ class MainWindow(QMainWindow):
         central_widget.layout().addWidget(wdg_slider_kernel)
         central_widget.layout().addWidget(self.viewer)
         self.setCentralWidget(central_widget)
+
+    def on_scale_selection_changed(self):
+        self.process()
+        self.update_image(self.dst, QImage.Format_RGB888)
 
     def on_load_pressed(self):
         options = QFileDialog.Options()
@@ -114,14 +134,35 @@ class MainWindow(QMainWindow):
             msp = doc.modelspace()
 
             points = []
-            for p in self.cnt.tolist():
+            contours = self.cnt.tolist()
+            contours.append(contours[0])
+            for p in contours:
                 points.append((p[0][0] / self.scaling, p[0][1] / self.scaling))
             msp.add_lwpolyline(points)
             doc.saveas(filename)
 
+            self.save_preferences()
+
     def on_slider_changed(self):
         self.process()
         self.update_image(self.dst, QImage.Format_RGB888)
+
+    def load_preferences_or_default(self):
+        try:
+            with open('preferences.yaml', 'r') as f:
+                prefs = yaml.safe_load(f)
+        except FileNotFoundError as exc:
+            prefs = {'scaling_idx': 1, 'threshold': 150, 'kernel': 11}
+
+        return prefs
+
+    def save_preferences(self):
+        self.prefs['scaling_idx'] = self.cmb_scaling.currentIndex()
+        self.prefs['threshold'] = self.slider_thresh.value()
+        self.prefs['kernel'] = self.slider_kernel.value()
+
+        with open('preferences.yaml', 'w') as f:
+            yaml.safe_dump(self.prefs, f)
 
     def process(self, filename=None):
         if filename is not None:
@@ -136,15 +177,16 @@ class MainWindow(QMainWindow):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.slider_kernel.value(), self.slider_kernel.value()))
         morphed = cv2.morphologyEx(threshed, cv2.MORPH_CLOSE, kernel)
 
-        # (3) Find the max-area contour
-        [_, cnts, _] = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if False:
+            # (3) Find the max-area contour
+            [_, cnts, _] = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # assert landscape orientation
-        if len(cnts) > 0:
-            cnt = sorted(cnts, key=cv2.contourArea)[-1]
-            (x, y), (w, h), a = cv2.minAreaRect(cnt)
-            if h > w:
-                morphed = cv2.rotate(morphed, cv2.ROTATE_90_CLOCKWISE)
+            # assert landscape orientation
+            if len(cnts) > 0:
+                cnt = sorted(cnts, key=cv2.contourArea)[-1]
+                (x, y), (w, h), a = cv2.minAreaRect(cnt)
+                if h > w:
+                    morphed = cv2.rotate(morphed, cv2.ROTATE_90_CLOCKWISE)
 
         # (3) Find the max-area contour
         [_, cnts, _] = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -186,7 +228,7 @@ class MainWindow(QMainWindow):
                     self.dst = fin.copy()
                     self.cnt = cnt
                     shadowboard_width_px = fin.shape[1]
-                    shadowboard_width_mm = 380
+                    shadowboard_width_mm = self.window_sizes[self.cmb_scaling.currentIndex()][0]
 
                     px2mm = shadowboard_width_px / shadowboard_width_mm
 
