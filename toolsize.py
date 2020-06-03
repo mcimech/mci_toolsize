@@ -16,7 +16,7 @@ from QtImageViewer import QtImageViewer
 
 import yaml
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 class MainWindow(QMainWindow):
@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
         central_widget.layout().addWidget(wdg_slider_kernel)
         central_widget.layout().addWidget(self.viewer)
         self.setCentralWidget(central_widget)
+        self.update_ui_status(enable=False)
 
     def on_scale_selection_changed(self):
         self.process()
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
         if filename:
             self.process(filename)
             self.update_image(self.dst, QImage.Format_RGB888)
+            self.update_ui_status(enable=True)
 
     def on_save_pressed(self):
         options = QFileDialog.Options()
@@ -142,6 +144,13 @@ class MainWindow(QMainWindow):
             doc.saveas(filename)
 
             self.save_preferences()
+
+    def update_ui_status(self, enable: bool):
+        self.cmb_scaling.setEnabled(enable)
+        self.slider_kernel.setEnabled(enable)
+        self.slider_thresh.setEnabled(enable)
+        self.btn_save.setEnabled(enable)
+        self.viewer.setEnabled(enable)
 
     def on_slider_changed(self):
         self.process()
