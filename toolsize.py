@@ -16,7 +16,7 @@ from QtImageViewer import QtImageViewer
 
 import yaml
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 
 
 class MainWindow(QMainWindow):
@@ -116,7 +116,8 @@ class MainWindow(QMainWindow):
 
     def on_scale_selection_changed(self):
         self.process()
-        self.update_image(self.dst, QImage.Format_RGB888)
+        if self.dst is not None:
+            self.update_image(self.dst, QImage.Format_RGB888)
 
     def on_load_pressed(self):
         options = QFileDialog.Options()
@@ -124,7 +125,8 @@ class MainWindow(QMainWindow):
                                                   "Image files (*.jpg *.jpeg *.png *.gif)", options=options)
         if filename:
             self.process(filename)
-            self.update_image(self.dst, QImage.Format_RGB888)
+            if self.dst is not None:
+                self.update_image(self.dst, QImage.Format_RGB888)
             self.update_ui_status(enable=True)
 
     def on_save_pressed(self):
@@ -154,7 +156,8 @@ class MainWindow(QMainWindow):
 
     def on_slider_changed(self):
         self.process()
-        self.update_image(self.dst, QImage.Format_RGB888)
+        if self.dst is not None:
+            self.update_image(self.dst, QImage.Format_RGB888)
 
     def load_preferences_or_default(self):
         try:
